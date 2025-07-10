@@ -1,15 +1,9 @@
 'use client';
 
 import { fetchApi } from "@/lib/api/fetchApi";
-import { carDataT, AreaCarData, lotteAreaT } from "@/types/lotte";
+import { carDataT, AreaCarData, lotteAreaT, FlattenedCarData } from "@/types/lotte";
 import { useEffect, useState, useMemo } from "react";
 import { CarList } from "./CarList";
-
-type FlattenedCarData = carDataT & {
-    areaCode: string;
-    areaName: string;
-    placeCode: string;
-};
 
 interface RoundSearchContainerProps {
     areas: lotteAreaT[];
@@ -17,43 +11,30 @@ interface RoundSearchContainerProps {
     errorAreas: string | null;
 }
 
-export const RoundSearchContainer = ({ areas, loadingAreas, errorAreas }: RoundSearchContainerProps) => {
-    const [searchError, setSearchError] = useState<string | null>(null);
+export const RoundSearchContainer = ({ areas }: RoundSearchContainerProps) => {
+    const [searchState, setSearchState] = useState<string | null>(null);
 
+    // 날짜/시간 입력
     const [puDateInput, setPuDateInput] = useState<string>('');
     const [puTimeInput, setPuTimeInput] = useState<string>('');
     const [retDateInput, setRetDateInput] = useState<string>('');
     const [retTimeInput, setRetTimeInput] = useState<string>('');
 
+    // 차량 데이터
     const [rawAllAreaCars, setRawAllAreaCars] = useState<AreaCarData[] | null>(null);
-    const [fetchingCars, setFetchingCars] = useState(false);
-    const [fetchProgress, setFetchProgress] = useState(0);
-
+    // 차량 검색 진행 상태;
+    const [fetchingState, setFetchingState] = useState(false)
+    // 최소 탑승 인원 입력
     const [minSeatsInput, setMinSeatsInput] = useState<string>('');
 
     useEffect(() => {
         // 초기 날짜/시간 설정
         setPuDateInput(`20250913`);
         setRetDateInput(`20250915`);
-        setPuTimeInput(`100000`);
-        setRetTimeInput(`160000`);
+        setPuTimeInput(`1000`);
+        setRetTimeInput(`1600`);
         setMinSeatsInput(`10`);
     }, []);
-
-    const getFormattedDateForApi = (dateInput: string) => {
-        return dateInput.replace(/-/g, '');
-    };
-
-    const getFormattedTimeForApi = (timeInput: string) => {
-        const parts = timeInput.split(':');
-        let hours = parseInt(parts[0] || '0', 10);
-        let minutes = parseInt(parts[1] || '0', 10);
-
-        if (isNaN(hours) || hours < 0 || hours > 23) hours = 0;
-        if (isNaN(minutes) || minutes < 0 || minutes > 59) minutes = 0;
-
-        return `${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}00`;
-    };
 
     const handlePuDateInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setPuDateInput(e.target.value);
     const handlePuTimeInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setPuTimeInput(e.target.value);
@@ -68,35 +49,32 @@ export const RoundSearchContainer = ({ areas, loadingAreas, errorAreas }: RoundS
     };
 
     const handleSearch = async () => {
-        const puDateFormatted = getFormattedDateForApi(puDateInput);
-        const puTimeFormatted = getFormattedTimeForApi(puTimeInput);
-        const retDateFormatted = getFormattedDateForApi(retDateInput);
-        const retTimeFormatted = getFormattedTimeForApi(retTimeInput);
-
         if (areas.length === 0) {
-            setSearchError('지점 데이터가 없어 차량을 검색할 수 없습니다. 상위 컴포넌트의 오류를 확인해주세요.');
+            setSearchState('지점 데이터가 없어 차량을 검색할 수 없습니다. 상위 컴포넌트의 오류를 확인해주세요.');
             return;
         }
         if (!puDateInput || !puTimeInput || !retDateInput || !retTimeInput) {
             alert('날짜와 시간을 모두 입력해주세요.');
             return;
         }
-        if (puDateFormatted.length !== 8 || puTimeFormatted.length !== 6 || retDateFormatted.length !== 8 || retTimeFormatted.length !== 6) {
+        if (puDateInput.length !== 8 || puTimeInput.length !== 4 || retDateInput.length !== 8 || retTimeInput.length !== 4) {
             alert('날짜는 WaybackMMDD, 시간은 HHMM00 형식으로 정확히 입력해주세요.');
             return;
         }
 
-        setFetchingCars(true);
-        setFetchProgress(0);
-        setSearchError(null);
+        setFetchingState(true);
+        setSearchState(null);
         setRawAllAreaCars(null);
 
+        //초(00) 추가
+        const puTimeString = puTimeInput+'00';
+        const retTimeString = retTimeInput+'00';
         const requestBody = {
             areas: areas,
-            puDateFormatted,
-            puTimeFormatted,
-            retDateFormatted,
-            retTimeFormatted
+            puDateInput,
+            puTimeString,
+            retDateInput,
+            retTimeString
         };
 
         try {
@@ -112,18 +90,17 @@ export const RoundSearchContainer = ({ areas, loadingAreas, errorAreas }: RoundS
             );
 
             setRawAllAreaCars(allRes);
-            setFetchProgress(100);
         } catch (e) {
             console.error('차량 검색 API 호출 오류:', e);
-            setSearchError('차량 검색 중 오류가 발생했습니다.');
+            setSearchState('차량 검색 중 오류가 발생했습니다.');
         } finally {
-            setFetchingCars(false);
+            setFetchingState(false);
         }
     };
 
     const handleClearAndSearchAgain = () => {
         setRawAllAreaCars(null);
-        setSearchError(null);
+        setSearchState(null);
         setMinSeatsInput('');
         handleSearch();
     };
@@ -219,13 +196,13 @@ export const RoundSearchContainer = ({ areas, loadingAreas, errorAreas }: RoundS
                     </div>
                     {/* 버튼 카드 */}
                     <div className="flex flex-col gap-3 mt-2">
-                        <button onClick={handleSearch} disabled={fetchingCars}
-                            className={`bg-gradient-to-r from-blue-500 to-purple-500 text-white p-4 rounded-xl w-full font-extrabold text-lg shadow-lg hover:from-blue-600 hover:to-purple-600 transition-all duration-200 ${fetchingCars ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        <button onClick={handleSearch} disabled={fetchingState}
+                            className={`bg-gradient-to-r from-blue-500 to-purple-500 text-white p-4 rounded-xl w-full font-extrabold text-lg shadow-lg hover:from-blue-600 hover:to-purple-600 transition-all duration-200 ${fetchingState ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                            {fetchingCars ? `검색 중... ${fetchProgress}%` : '차량 검색'}
+                            {fetchingState ? `검색 중...` : '차량 검색'}
                         </button>
-                        <button onClick={handleClearAndSearchAgain} disabled={fetchingCars}
-                            className={`bg-gradient-to-r from-gray-600 to-gray-800 text-white p-4 rounded-xl w-full font-bold text-lg shadow-lg hover:from-gray-700 hover:to-gray-900 transition-all duration-200 ${fetchingCars ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        <button onClick={handleClearAndSearchAgain} disabled={fetchingState}
+                            className={`bg-gradient-to-r from-gray-600 to-gray-800 text-white p-4 rounded-xl w-full font-bold text-lg shadow-lg hover:from-gray-700 hover:to-gray-900 transition-all duration-200 ${fetchingState ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             다시 찾기
                         </button>
@@ -233,9 +210,8 @@ export const RoundSearchContainer = ({ areas, loadingAreas, errorAreas }: RoundS
                 </div>
             </div>
             <CarList
-                fetchingCars={fetchingCars}
-                fetchProgress={fetchProgress}
-                searchError={searchError}
+                fetchingState={fetchingState}
+                searchState={searchState}
                 processedCars={processedAllCars}
                 rawAllAreaCars={rawAllAreaCars}
             />

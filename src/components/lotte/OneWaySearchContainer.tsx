@@ -1,19 +1,10 @@
 'use client';
 
 import { fetchApi } from "@/lib/api/fetchApi";
-import { Area, carDataT, AreaCarData, lotteAreaT } from "@/types/lotte";
+import { carDataT, AreaCarData, lotteAreaT, FlattenedCarData } from "@/types/lotte";
 import { useEffect, useState, useMemo } from "react";
 import { CarList } from "./CarList";
 import { getFinalDisplayPrice } from "@/utils/car";
-
-type FlattenedCarData = carDataT & {
-    areaCode: string;
-    areaName: string;
-    placeCode: string;
-    returnAreaCode?: string; // 편도 반납 지점 코드
-    returnAreaName?: string; // 편도 반납 지점 이름
-    returnPlaceCode?: string; // 편도 반납 장소 코드
-};
 
 interface OneWaySearchContainerProps {
     areas: lotteAreaT[];
@@ -21,12 +12,12 @@ interface OneWaySearchContainerProps {
     errorAreas: string | null;
 }
 
-export const OneWaySearchContainer = ({ areas, loadingAreas, errorAreas }: OneWaySearchContainerProps) => { // prop으로 areas, loadingAreas, errorAreas 받기
-    const [searchError, setSearchError] = useState<string | null>(null);
+export const OneWaySearchContainer = ({ areas }: OneWaySearchContainerProps) => { 
+    const [searchState, setSearchState] = useState<string | null>(null);
 
     // 편도 픽업/반납 지점
-    const [pickupLocation, setPickupLocation] = useState<Area | undefined>(undefined);
-    const [returnLocation, setReturnLocation] = useState<Area | undefined>(undefined);
+    const [pickupLocation, setPickupLocation] = useState<lotteAreaT | undefined>(undefined);
+    const [returnLocation, setReturnLocation] = useState<lotteAreaT | undefined>(undefined);
 
     // 날짜 및 시간
     const [puDateInput, setPuDateInput] = useState<string>('');
@@ -34,10 +25,11 @@ export const OneWaySearchContainer = ({ areas, loadingAreas, errorAreas }: OneWa
     const [retDateInput, setRetDateInput] = useState<string>('');
     const [retTimeInput, setRetTimeInput] = useState<string>('');
 
+    // 차량 데이터
     const [rawAllAreaCars, setRawAllAreaCars] = useState<AreaCarData[] | null>(null);
-    const [fetchingCars, setFetchingCars] = useState(false);
-    const [fetchProgress, setFetchProgress] = useState(0);
-
+    // 차량 검색 진행 상태;
+    const [fetchingState, setFetchingState] = useState(false);
+    // 최소 탑승 인원 입력
     const [minSeatsInput, setMinSeatsInput] = useState<string>('');
 
     useEffect(() => {
@@ -51,20 +43,11 @@ export const OneWaySearchContainer = ({ areas, loadingAreas, errorAreas }: OneWa
         // 초기 날짜/시간 설정
         setPuDateInput(`20250913`);
         setRetDateInput(`20250915`);
-        setPuTimeInput(`100000`);
-        setRetTimeInput(`160000`);        
+        setPuTimeInput(`1000`);
+        setRetTimeInput(`1600`);        
         setMinSeatsInput(`10`);
     }, []);
 
-    const getFormattedDateForApi = (dateInput: string) => dateInput.replace(/-/g, '');
-    const getFormattedTimeForApi = (timeInput: string) => {
-        const parts = timeInput.split(':');
-        let hours = parseInt(parts[0] || '0', 10);
-        let minutes = parseInt(parts[1] || '0', 10);
-        if (isNaN(hours) || hours < 0 || hours > 23) hours = 0;
-        if (isNaN(minutes) || minutes < 0 || minutes > 59) minutes = 0;
-        return `${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}00`;
-    };
 
     const handlePickupLocationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const selectedCode = e.target.value;
@@ -84,40 +67,38 @@ export const OneWaySearchContainer = ({ areas, loadingAreas, errorAreas }: OneWa
     };
 
     const handleSearch = async () => {
-        const puDateFormatted = getFormattedDateForApi(puDateInput);
-        const puTimeFormatted = getFormattedTimeForApi(puTimeInput);
-        const retDateFormatted = getFormattedDateForApi(retDateInput);
-        const retTimeFormatted = getFormattedTimeForApi(retTimeInput);
 
         if (!areas || areas.length === 0) {
-            setSearchError('지점 데이터를 불러오는 중이거나, 불러올 지점이 없습니다.');
+            setSearchState('지점 데이터를 불러오는 중이거나, 불러올 지점이 없습니다.');
             return;
         }
         if (!pickupLocation || !returnLocation || !puDateInput || !puTimeInput || !retDateInput || !retTimeInput) {
             alert('모든 필수 정보를 입력해주세요 (픽업/반납 지점, 날짜, 시간).');
             return;
         }
-        if (puDateFormatted.length !== 8 || puTimeFormatted.length !== 6 || retDateFormatted.length !== 8 || retTimeFormatted.length !== 6) {
+         if (puDateInput.length !== 8 || puTimeInput.length !== 4 || retDateInput.length !== 8 || retTimeInput.length !== 4) {
             alert('날짜는 WaybackMMDD, 시간은 HHMM00 형식으로 정확히 입력해주세요.');
             return;
         }
 
-        setFetchingCars(true);
-        setFetchProgress(0);
-        setSearchError(null);
+         setFetchingState(true);
+        setSearchState(null);
         setRawAllAreaCars(null);
+
+        //초(00) 추가
+        const puTimeString = puTimeInput+'00';
+        const retTimeString = retTimeInput+'00';
 
         try {
             const requestBody = {
                 branchCd: pickupLocation.code,
-                rentDate: puDateFormatted,
-                rentTime: puTimeFormatted,
+                rentDate: puDateInput,
+                rentTime: puTimeString,
                 splace: pickupLocation.placeCode,
-                returnDate: retDateFormatted,
-                returnTime: retTimeFormatted,
+                returnDate: retDateInput,
+                returnTime: retTimeString,
                 eplace: returnLocation.placeCode,
-                returnBranchCd: returnLocation.code, // 편도 시 반납 지점 코드 추가
-
+                returnBranchCd: returnLocation.code,
 
                 mvgr2_h: "21",
                 pikcupflag: "1",
@@ -144,20 +125,19 @@ export const OneWaySearchContainer = ({ areas, loadingAreas, errorAreas }: OneWa
                 returnPlaceCode: returnLocation.placeCode,
                 cars: carRes || []
             }]);
-            setFetchProgress(100);
 
         } catch (e) {
             console.error('차량 검색 API 호출 오류:', e);
-            setSearchError('차량 검색 중 오류가 발생했습니다.');
+            setSearchState('차량 검색 중 오류가 발생했습니다.');
             setRawAllAreaCars([]);
         } finally {
-            setFetchingCars(false);
+            setFetchingState(false);
         }
     };
 
     const handleClearAndSearchAgain = () => {
         setRawAllAreaCars(null);
-        setSearchError(null);
+        setSearchState(null);
         setMinSeatsInput('');
         handleSearch();
     };
@@ -274,13 +254,13 @@ export const OneWaySearchContainer = ({ areas, loadingAreas, errorAreas }: OneWa
                     </div>
                     {/* 버튼 카드 */}
                     <div className="flex flex-col gap-3 mt-2">
-                        <button onClick={handleSearch} disabled={fetchingCars}
-                            className={`bg-gradient-to-r from-blue-500 to-purple-500 text-white p-4 rounded-xl w-full font-extrabold text-lg shadow-lg hover:from-blue-600 hover:to-purple-600 transition-all duration-200 ${fetchingCars ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        <button onClick={handleSearch} disabled={fetchingState}
+                            className={`bg-gradient-to-r from-blue-500 to-purple-500 text-white p-4 rounded-xl w-full font-extrabold text-lg shadow-lg hover:from-blue-600 hover:to-purple-600 transition-all duration-200 ${fetchingState ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
-                            {fetchingCars ? `검색 중... ${fetchProgress}%` : '차량 검색'}
+                            {fetchingState ? `검색 중... ` : '차량 검색'}
                         </button>
-                        <button onClick={handleClearAndSearchAgain} disabled={fetchingCars}
-                            className={`bg-gradient-to-r from-gray-600 to-gray-800 text-white p-4 rounded-xl w-full font-bold text-lg shadow-lg hover:from-gray-700 hover:to-gray-900 transition-all duration-200 ${fetchingCars ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        <button onClick={handleClearAndSearchAgain} disabled={fetchingState}
+                            className={`bg-gradient-to-r from-gray-600 to-gray-800 text-white p-4 rounded-xl w-full font-bold text-lg shadow-lg hover:from-gray-700 hover:to-gray-900 transition-all duration-200 ${fetchingState ? 'opacity-50 cursor-not-allowed' : ''}`}
                         >
                             다시 찾기
                         </button>
@@ -288,9 +268,8 @@ export const OneWaySearchContainer = ({ areas, loadingAreas, errorAreas }: OneWa
                 </div>
             </div>
             <CarList
-                fetchingCars={fetchingCars}
-                fetchProgress={fetchProgress}
-                searchError={searchError}
+                fetchingState={fetchingState}
+                searchState={searchState}
                 processedCars={processedCars}
                 rawAllAreaCars={rawAllAreaCars}
             />

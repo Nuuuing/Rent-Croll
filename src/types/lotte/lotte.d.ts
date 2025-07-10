@@ -1,5 +1,3 @@
-// src/types/lotte.d.ts (또는 lotte.ts)
-
 export interface lotteAreaT {
     code: string;
     placeCode: string;
@@ -11,8 +9,6 @@ export interface lotteAreaT {
     lat: number;
     lng: number;
 }
-
-export type Area = lotteAreaT; // lotteAreaT의 별칭으로 Area를 export
 
 export interface carDataT {
     code: string;
@@ -63,17 +59,15 @@ export interface dcListT {
     hmopyn: string;
 }
 
-// AreaCarData 인터페이스 수정 및 return 관련 필드 추가
 export interface AreaCarData {
     areaCode: string;
     placeCode: string;
     areaName: string;
-    cars: carDataT[]; // 이 부분을 carDataT[]로 변경해야 합니다.
+    cars?: carDataT[]; 
     error?: string;
-    // 편도 관련 필드 추가
     returnAreaCode?: string;
-    returnAreaName?: string; // 이 속성이 누락되었던 것입니다.
-    returnPlaceCode?: string; // 이 속성이 누락되었던 것입니다.
+    returnAreaName?: string; 
+    returnPlaceCode?: string; 
 };
 
 export type GroupedArea = {
@@ -81,4 +75,13 @@ export type GroupedArea = {
     '500': lotteAreaT[];
     '600': lotteAreaT[];
     '기타': lotteAreaT[];
+};
+
+export type FlattenedCarData = carDataT & {
+    areaCode: string;
+    areaName: string;
+    placeCode: string;    
+    returnAreaCode?: string; // 편도 반납 지점 코드
+    returnAreaName?: string; // 편도 반납 지점 이름
+    returnPlaceCode?: string; // 편도 반납 장소 코드
 };
